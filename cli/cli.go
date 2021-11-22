@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/go_lang_coins/explorer"
 	"github.com/go_lang_coins/rest"
@@ -14,7 +15,7 @@ func usage(){
 	fmt.Printf("명령어를 입력해 주세요\n\n")
 	fmt.Printf("-port: 서버의 포트\n")
 	fmt.Printf("-mode: 'REST' 와 'HTML'을 고르시오\n")
-	os.Exit(0)
+	runtime.Goexit() //Goexit는 모든 함수를 제거하지만 그 전에 defer를 먼저 이행함
 }
 
 func Start(){												//gohtml 로 끝나는 파일 불러오기
