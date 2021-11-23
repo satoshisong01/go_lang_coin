@@ -49,6 +49,11 @@ func documentation(rw http.ResponseWriter, r *http.Request){
 			Description: "보여줘 항목들을!",
 		},
 		{
+			URL: url("/status"),
+			Method: "GET",
+			Description: "블록체인의 상태를 보여줘",
+		},
+		{
 			URL: url("/blocks"),
 			Method: "GET",
 			Description: "블록을 보여줘",
@@ -105,11 +110,16 @@ func jsonContentTypeMiddleware(next http.Handler) http.Handler{
 	})
 }
 
+func status(rw http.ResponseWriter, r *http.Request) {
+	json.NewEncoder(rw).Encode(blockchain.Blockchain())
+}
+
 func Start(aPort int){
 	port = fmt.Sprintf(":%d", aPort)
 	router := mux.NewRouter()
 	router.Use(jsonContentTypeMiddleware) //미들웨어 사용
 	router.HandleFunc("/", documentation).Methods("GET")
+	router.HandleFunc("/status", status)
 	router.HandleFunc("/blocks", blocks).Methods("GET","POST")
 	router.HandleFunc("/blocks/{hash:[a-f0-9]+}", block).Methods("GET")
 	fmt.Printf("http://localhost%s\n", port)

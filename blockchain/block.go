@@ -1,9 +1,10 @@
 package blockchain
 
 import (
-	"crypto/sha256"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/go_lang_coins/db"
 	"github.com/go_lang_coins/utils"
@@ -15,6 +16,9 @@ type Block struct {
 	Hash     string `json:"hash"`
 	PrevHash string `json:"prevhash",omitempty`
 	Height 	 int	`json:"height"`
+	Difficulty int `json:"difficulty"`
+	Nonce	int 	`json:"nonce"`
+	Timestamp int	`json:"timestamp"`
 }
 
 var ErrNotFound = errors.New("블록을 찾을 수 없습니다")
@@ -35,6 +39,21 @@ func FindBlock(hash string) (*Block, error){
 	return block, nil
 }
 
+func (b *Block) mine(){
+	target := strings.Repeat("0", b.Difficulty) //Repeat 0 몇번 반복
+	for{
+		b.Timestamp = int(time.Now().Unix()) //unixrk int64를 리턴해준다
+		hash := utils.Hash(b)
+		fmt.Printf("\n\nTarget:%s\nHash:%s\nNonce:%d\n\n\n", target, hash, b.Nonce)
+		//Hasprefix 찾을값 앞쪽 , HasSuffix 찾을값 뒤쪽 
+		if strings.HasPrefix(hash, target){
+			b.Hash = hash
+			break
+		} else{
+			b.Nonce++
+		}
+	}
+}
 
 //persist는 블록을 저장하기위해 만들어 놓은 SaveBlock함수를 호출
 func (b *Block) persist(){
@@ -48,9 +67,10 @@ func createBlock(data string, prevHash string, height int) *Block{
 		Hash: "",
 		PrevHash: prevHash,
 		Height: height,
+		Difficulty: Blockchain().difficulty(),
+		Nonce: 0,
 	}
-	payload := block.Data + block.PrevHash + fmt.Sprint(block.Height)
-	block.Hash = fmt.Sprintf("%x", sha256.Sum256([]byte(payload)))
+	block.mine()
 	block.persist()
 	return block
 }

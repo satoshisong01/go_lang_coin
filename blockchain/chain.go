@@ -8,9 +8,17 @@ import (
 	"github.com/go_lang_coins/utils"
 )
 
+const(
+	defaultDifficulty int = 2
+	difficultyInterval int = 5
+	blockInterval int = 2
+	allowedRange int = 2
+)
+
 type blockchain struct {
 	NewstHash string `json:"newestHash`
 	Height 	 int	`json:"height"`
+	CurrentDifficulty int `json:"currentDifficulty"`
 }
 
 var b *blockchain
@@ -29,6 +37,7 @@ func (b *blockchain) AddBlock(data string){
 	block := createBlock(data, b.NewstHash, b.Height +1)
 	b.NewstHash = block.Hash
 	b.Height = block.Height
+	b.CurrentDifficulty = block.Difficulty
 	b.persist()
 }
 
@@ -47,12 +56,41 @@ func (b *blockchain) Blocks() []*Block{
 	return blocks
 }
 
+func (b *blockchain) recalculateDifficulty() int{
+	allBLocks := b.Blocks()
+	newestBlock := allBLocks[0] //첫값을 가저옴
+	lastrecalculatedBlock := allBLocks[difficultyInterval -1] //0부터 카운팅 하기때문에 -1
+	actualTime := (newestBlock.Timestamp/60) - (lastrecalculatedBlock.Timestamp/60) //초단위를 분단위로 바꿈
+	expectedTime := difficultyInterval * blockInterval
+	if actualTime <= (expectedTime - allowedRange) { //범위를 여유를 준다 ex) 10>0 대신 11 ~ 9 >0
+		return b.CurrentDifficulty + 1 //실제 예상 시간보다 적다면, 빨리 생성되니까 +1 로 늘린다
+	} else if actualTime >= (expectedTime + allowedRange) {
+		return b.CurrentDifficulty - 1 //실제 예상시간보다 길다면, -1로 줄인다
+	} else {
+		return b.CurrentDifficulty
+	}
+}
+
+func (b *blockchain) difficulty() int{
+	if b.Height == 0 {
+		return defaultDifficulty
+	} else if b.Height % difficultyInterval == 0{ //5단위간격으로 확인
+		return b.recalculateDifficulty()
+	}else {
+		return b.CurrentDifficulty
+	}
+}
+
+
+
 //블록체인을 처음 만들때
 func Blockchain() *blockchain {
 	if b == nil { //처음에 아무것도 없을때
 		once.Do(func() {
 			//빈 블록체인을 만들고
-			b = &blockchain{"", 0}
+			b = &blockchain{
+				Height: 0,
+			}
 			checkpoint := db.Checkpoint()
 
 			//DB에서 체크포인트를 찾는다

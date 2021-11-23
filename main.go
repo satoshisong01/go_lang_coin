@@ -12,7 +12,6 @@ import (
 
 
 func main(){
-	defer db.Close() //defer은 함수가 종료될때 실행
+	defer db.Close()
 	cli.Start()
-	
 }
