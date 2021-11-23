@@ -12,13 +12,13 @@ import (
 
 
 type Block struct {
-	Data     string `json:"data"`
 	Hash     string `json:"hash"`
 	PrevHash string `json:"prevhash",omitempty`
 	Height 	 int	`json:"height"`
 	Difficulty int `json:"difficulty"`
 	Nonce	int 	`json:"nonce"`
 	Timestamp int	`json:"timestamp"`
+	Transactions []*Tx `json:"transactions"`
 }
 
 var ErrNotFound = errors.New("블록을 찾을 수 없습니다")
@@ -61,14 +61,14 @@ func (b *Block) persist(){
 }
 
 //새로운 블록을 만들면 블록을 hash하고 이 블록을 db에저장(persist 이용)
-func createBlock(data string, prevHash string, height int) *Block{
+func createBlock(prevHash string, height int) *Block{
 	block := &Block{
-		Data: data,
 		Hash: "",
 		PrevHash: prevHash,
 		Height: height,
 		Difficulty: Blockchain().difficulty(),
 		Nonce: 0,
+		Transactions: []*Tx{makeCoinbaseTx("sks")},
 	}
 	block.mine()
 	block.persist()

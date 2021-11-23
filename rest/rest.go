@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"github.com/go_lang_coins/blockchain"
-	"github.com/go_lang_coins/utils"
 	"github.com/gorilla/mux"
 )
 
@@ -29,10 +28,6 @@ type urlDescription struct{
 	Description string `json:"description"`
 	Payload string `json:"payload,omitempty"`
 	//json:",omitempty" 쓰면 파일이 없을때 표기안함
-}
-
-type addBlockBody struct{
-	Message string
 }
 
 type errorResponse struct{
@@ -82,9 +77,7 @@ func blocks(rw http.ResponseWriter, r *http.Request) {
 		case "GET":
 			json.NewEncoder(rw).Encode(blockchain.Blockchain().Blocks())
 		case "POST":
-			var addBlockBody addBlockBody
-			utils.HandleErr(json.NewDecoder(r.Body).Decode(&addBlockBody))
-			blockchain.Blockchain().AddBlock(addBlockBody.Message)
+			blockchain.Blockchain().AddBlock()
 			rw.WriteHeader(http.StatusCreated)
 	}
 }

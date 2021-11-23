@@ -33,8 +33,8 @@ func (b *blockchain) persist(){
 	db.SaveBlockchain(utils.ToBytes(b))
 }
 
-func (b *blockchain) AddBlock(data string){
-	block := createBlock(data, b.NewstHash, b.Height +1)
+func (b *blockchain) AddBlock(){
+	block := createBlock(b.NewstHash, b.Height +1)
 	b.NewstHash = block.Hash
 	b.Height = block.Height
 	b.CurrentDifficulty = block.Difficulty
@@ -95,7 +95,7 @@ func Blockchain() *blockchain {
 
 			//DB에서 체크포인트를 찾는다
 			if checkpoint == nil{
-				b.AddBlock("새롭게 시작")
+				b.AddBlock()
 			} else{
 				b.restore(checkpoint) //db에서 찾은 bytes를 보내준다
 			}
