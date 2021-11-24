@@ -13,7 +13,7 @@ import (
 
 type Block struct {
 	Hash     string `json:"hash"`
-	PrevHash string `json:"prevhash",omitempty`
+	PrevHash string `json:"prevhash,omitempty"`
 	Height 	 int	`json:"height"`
 	Difficulty int `json:"difficulty"`
 	Nonce	int 	`json:"nonce"`

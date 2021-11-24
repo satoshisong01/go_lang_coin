@@ -16,7 +16,7 @@ const(
 )
 
 type blockchain struct {
-	NewstHash string `json:"newestHash`
+	NewstHash string `json:"newestHash"`
 	Height 	 int	`json:"height"`
 	CurrentDifficulty int `json:"currentDifficulty"`
 }
@@ -82,6 +82,39 @@ func (b *blockchain) difficulty() int{
 }
 
 
+func (b *blockchain) txOuts() []*TxOut{ //거래 출력값들을 가져다주는 함수
+	var txOuts []*TxOut
+	blocks := b.Blocks() //전체블록 로드
+	for _, block := range blocks {//모든 블록을 살펴봄
+		for _, tx := range block.Transactions{//모든 블록안에 있는 거래내역을 살펴봄
+			txOuts = append(txOuts, tx.TxOuts...)//모든거래 내역들의 출력값들을 하나의 슬라이스로 모음
+		}
+	}
+	return txOuts
+}
+
+
+func (b *blockchain) TxOutsByAddress(address string) []*TxOut{ //거래출력값들을 주소에 따라 걸러내는 함수
+	//거래 출력값들을 주어진 address에 따라 필터함
+	var ownedTxOuts []*TxOut//address에 소속된 출력값들만 뽑아내고 변수에 지정해줌 (슬라이스)
+	txOuts := b.txOuts() //출력값을 리턴했던 txOuts를 다시불러와서 사용
+	for _, txOut := range txOuts { //블록 안에 모든 거래출력값에서 나온 출력값에
+		if txOut.Owner == address { // 해당 출력값의 주인이 주소와 동일하다면
+			ownedTxOuts = append(ownedTxOuts, txOut) // 출력값을 ownedTxOuts 슬라이스에 포함시킴
+		}
+	}
+	return ownedTxOuts
+}
+
+//총량 을 보여주는 함수
+func (b *blockchain) BalanceByAddress(address string) int { 
+	txOuts := b.TxOutsByAddress(address)//주소에따라 거래 출력값들을 받아옴
+	var amount int //총액 변수
+	for _, txOut := range txOuts { //출력값 목록에 있는 트랜잭션 출력값마다
+		amount += txOut.Amount //해당하는 출력값의 총량을 amount 변수에 더해줌
+	}			//출력 값을 모두 더해 amount를 반환하는 것
+	return amount //리턴
+}
 
 //블록체인을 처음 만들때
 func Blockchain() *blockchain {
@@ -105,65 +138,3 @@ func Blockchain() *blockchain {
 	fmt.Printf("뉴해쉬: %s\n", b.NewstHash)
 	return b
 }
-
-
-// package blockchain
-
-// import (
-// 	"crypto/sha256"
-// 	"fmt"
-// 	"sync"
-// )
-
-// type Block struct{
-// 	Data string
-// 	Hash string
-// 	PrevHash string
-// }
-
-// type blockchain struct{
-// 	blocks []*Block
-// }
-
-// var once sync.Once //한번만 실행되는 go sync
-// var b *blockchain
-
-// func (b *Block) calculHash(){
-// 	hash := sha256.Sum256([]byte(b.Data + b.PrevHash))
-// 	b.Hash = fmt.Sprintf("%x", hash)
-// }
-
-// func getLastHash() string{
-// 	totalBlocks := len(GetBlockchain().blocks)
-// 	if totalBlocks == 0 {
-// 		return ""
-// 	}
-// 	return GetBlockchain().blocks[totalBlocks - 1].Hash
-// }
-
-// func createBlock(data string) *Block{
-// 	newBlock := Block{data, "",getLastHash()}
-// 	newBlock.calculHash()
-// 	return &newBlock
-// }
-
-// //첫블록
-// func (b *blockchain) AddBlock(data string){
-// 	b.blocks = append(b.blocks, createBlock(data))
-// }
-
-
-// //인스턴스 하나 싱글톤패턴
-// func GetBlockchain()*blockchain{
-// 	if b == nil {
-// 		once.Do(func(){
-// 			b = &blockchain{}
-// 			b.AddBlock("Genesis")
-// 		})
-// 	}
-// 	return b
-// }
-
-// func (b *blockchain) AllBlocks()[]*Block{
-// 	return b.blocks
-// }
