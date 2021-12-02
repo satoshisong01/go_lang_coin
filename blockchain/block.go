@@ -61,16 +61,16 @@ func (b *Block) persist(){
 }
 
 //새로운 블록을 만들면 블록을 hash하고 이 블록을 db에저장(persist 이용)
-func createBlock(prevHash string, height int) *Block{
+func createBlock(prevHash string, height int, diff int) *Block{
 	block := &Block{
-		Hash: "",
-		PrevHash: prevHash,
-		Height: height,
-		Difficulty: Blockchain().difficulty(),
-		Nonce: 0,
-		Transactions: []*Tx{makeCoinbaseTx("sks")},
+		Hash:       "",
+		PrevHash:   prevHash,
+		Height:     height,
+		Difficulty: diff,
+		Nonce:      0,
 	}
 	block.mine()
+	block.Transactions = Mempool.TxToConfirm()
 	block.persist()
 	return block
 }

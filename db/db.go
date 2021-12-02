@@ -54,7 +54,7 @@ func SaveBlock(hash string, data []byte){
 }
 
 //블록체인을 저장할때는 key없이 data만 필요하다
-func SaveBlockchain(data []byte){
+func SaveCheckpoint(data []byte){
 	err := DB().Update(func(t *bolt.Tx) error {
 		bucket := t.Bucket([]byte(dataBucket))
 		err := bucket.Put([]byte(checkpoint), data) //checkpoint : key , data : value

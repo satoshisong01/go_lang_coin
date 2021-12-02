@@ -1,13 +1,13 @@
 package blockchain
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/go_lang_coins/db"
 	"github.com/go_lang_coins/utils"
 )
 
+// 함수에 변경값이 없다면 method로 남아있는건 직관적이지 않고 바람직하지 않다
 const(
 	defaultDifficulty int = 2
 	difficultyInterval int = 5
@@ -29,19 +29,20 @@ func (b *blockchain) restore(data []byte){
 	utils.FromBytes(b, data)
 }
 
-func (b *blockchain) persist(){
-	db.SaveBlockchain(utils.ToBytes(b))
-}
 
 func (b *blockchain) AddBlock(){
-	block := createBlock(b.NewstHash, b.Height +1)
+	block := createBlock(b.NewstHash, b.Height +1, getDifficulty(b))
 	b.NewstHash = block.Hash
 	b.Height = block.Height
 	b.CurrentDifficulty = block.Difficulty
-	b.persist()
+	persistBlockchain(b)
 }
 
-func (b *blockchain) Blocks() []*Block{
+func persistBlockchain(b *blockchain){
+	db.SaveCheckpoint(utils.ToBytes(b))
+}
+
+func Blocks(b *blockchain) []*Block{
 	var blocks []*Block //블록 포인터의 slice만든뒤
 	hashCursor := b.NewstHash  //찾을 해쉬인 hashCursor만듦(초기에는 newstHash찾음)
 	for {
@@ -56,8 +57,8 @@ func (b *blockchain) Blocks() []*Block{
 	return blocks
 }
 
-func (b *blockchain) recalculateDifficulty() int{
-	allBLocks := b.Blocks()
+func recalculateDifficulty(b *blockchain) int{
+	allBLocks := Blocks(b)
 	newestBlock := allBLocks[0] //첫값을 가저옴
 	lastrecalculatedBlock := allBLocks[difficultyInterval -1] //0부터 카운팅 하기때문에 -1
 	actualTime := (newestBlock.Timestamp/60) - (lastrecalculatedBlock.Timestamp/60) //초단위를 분단위로 바꿈
@@ -71,44 +72,46 @@ func (b *blockchain) recalculateDifficulty() int{
 	}
 }
 
-func (b *blockchain) difficulty() int{
+func getDifficulty(b *blockchain) int{
 	if b.Height == 0 {
 		return defaultDifficulty
 	} else if b.Height % difficultyInterval == 0{ //5단위간격으로 확인
-		return b.recalculateDifficulty()
+		return recalculateDifficulty(b)
 	}else {
 		return b.CurrentDifficulty
 	}
 }
 
+//input에 사용되지 않은 output을 넘겨주는 함수
+func UTxOutsByAddress(address string, b *blockchain) []*UTxOut { //거래출력값들을 주소에 따라 걸러내는 함수
+	var uTxOuts []*UTxOut
+	creatorTxs := make(map[string]bool)//키: 트랜색션 ID[string]타입   밸류: bool
 
-func (b *blockchain) txOuts() []*TxOut{ //거래 출력값들을 가져다주는 함수
-	var txOuts []*TxOut
-	blocks := b.Blocks() //전체블록 로드
-	for _, block := range blocks {//모든 블록을 살펴봄
-		for _, tx := range block.Transactions{//모든 블록안에 있는 거래내역을 살펴봄
-			txOuts = append(txOuts, tx.TxOuts...)//모든거래 내역들의 출력값들을 하나의 슬라이스로 모음
+	for _, block := range Blocks(b) { //블럭을 참조
+		for _, tx := range block.Transactions { //블럭안에 트랜잭션을 참조
+			for _, input := range tx.TxIns {	//트랜색션 안의 트랜색션 input 추적
+				if input.Owner == address {
+					creatorTxs[input.TxID] = true //해당 input으로 사용하는 output을 생성한 트랜잭션을 찾음
+				}
+			}
+			for index, output := range tx.TxOuts { //해당 output이 creatorTxs 안에 있는 트랜잭션 내에 없다는 것을 확인함
+				if output.Owner == address {
+					if _, ok := creatorTxs[tx.ID]; !ok { //input으로 사용하고 있는 output을 소유한 트랜잭션ID로 들어오지않으면
+						uTxOut := &UTxOut{tx.ID, index, output.Amount} //새로 생성된 unspent 트랜색션 output을 확인하면서
+						if !isOnMempool(uTxOut){	//이미 mempool에서 사용되고 있는지 체크함(해당 트랜색션ID를 가진 input과 index를 찾아옴)
+							uTxOuts = append(uTxOuts, uTxOut) //아직할당하지 않은것이므로 uTxouts을 찾은것임
+						}
+					}
+				}
+			}
 		}
 	}
-	return txOuts
-}
-
-
-func (b *blockchain) TxOutsByAddress(address string) []*TxOut{ //거래출력값들을 주소에 따라 걸러내는 함수
-	//거래 출력값들을 주어진 address에 따라 필터함
-	var ownedTxOuts []*TxOut//address에 소속된 출력값들만 뽑아내고 변수에 지정해줌 (슬라이스)
-	txOuts := b.txOuts() //출력값을 리턴했던 txOuts를 다시불러와서 사용
-	for _, txOut := range txOuts { //블록 안에 모든 거래출력값에서 나온 출력값에
-		if txOut.Owner == address { // 해당 출력값의 주인이 주소와 동일하다면
-			ownedTxOuts = append(ownedTxOuts, txOut) // 출력값을 ownedTxOuts 슬라이스에 포함시킴
-		}
-	}
-	return ownedTxOuts
+		return uTxOuts
 }
 
 //총량 을 보여주는 함수
-func (b *blockchain) BalanceByAddress(address string) int { 
-	txOuts := b.TxOutsByAddress(address)//주소에따라 거래 출력값들을 받아옴
+func BalanceByAddress(address string, b *blockchain) int {
+	txOuts := UTxOutsByAddress(address, b)//주소에따라 거래 출력값들을 받아옴
 	var amount int //총액 변수
 	for _, txOut := range txOuts { //출력값 목록에 있는 트랜잭션 출력값마다
 		amount += txOut.Amount //해당하는 출력값의 총량을 amount 변수에 더해줌
@@ -118,23 +121,16 @@ func (b *blockchain) BalanceByAddress(address string) int {
 
 //블록체인을 처음 만들때
 func Blockchain() *blockchain {
-	if b == nil { //처음에 아무것도 없을때
-		once.Do(func() {
-			//빈 블록체인을 만들고
-			b = &blockchain{
-				Height: 0,
-			}
-			checkpoint := db.Checkpoint()
-
-			//DB에서 체크포인트를 찾는다
-			if checkpoint == nil{
-				b.AddBlock()
-			} else{
-				b.restore(checkpoint) //db에서 찾은 bytes를 보내준다
-			}
-			//체크포인트가 있다면 bytes로 부터 블록체인을 복원함
-		})
-	}
-	fmt.Printf("뉴해쉬: %s\n", b.NewstHash)
+	once.Do(func() {
+		b = &blockchain{
+			Height: 0,
+		}
+		checkpoint := db.Checkpoint()
+		if checkpoint == nil{
+			b.AddBlock()
+		} else{
+			b.restore(checkpoint)
+		}
+	})
 	return b
 }

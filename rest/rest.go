@@ -40,6 +40,11 @@ type errorResponse struct{
 	ErrorMessage string `json:"errorMessage"`
 }
 
+type addTxPayload struct{
+	To string
+	Amount int
+}
+
 //*Marshal은 Json으로 encoding한 interface(v)를 return해준다*
 //*Marshal은 ~메모리형식으로 저장된 객체를, 저장/송신 할 수 있도록 변환해 준다
 func documentation(rw http.ResponseWriter, r *http.Request){
@@ -86,7 +91,7 @@ func documentation(rw http.ResponseWriter, r *http.Request){
 func blocks(rw http.ResponseWriter, r *http.Request) {
 	switch r.Method{
 		case "GET":
-			json.NewEncoder(rw).Encode(blockchain.Blockchain().Blocks())
+			utils.HandleErr(json.NewEncoder(rw).Encode(blockchain.Blocks(blockchain.Blockchain())))
 		case "POST":
 			blockchain.Blockchain().AddBlock()
 			rw.WriteHeader(http.StatusCreated)
@@ -127,11 +132,26 @@ func balance(rw http.ResponseWriter, r *http.Request) {
 	total := r.URL.Query().Get("total") //?total=ture 통해서 자산 총액을 받음
 	switch total {
 	case "true":
-		amount := blockchain.Blockchain().BalanceByAddress(address)
+		amount := blockchain.BalanceByAddress(address, blockchain.Blockchain())
 		json.NewEncoder(rw).Encode(balanceResponse{address, amount})
 	default:
-		utils.HandleErr(json.NewEncoder(rw).Encode(blockchain.Blockchain().TxOutsByAddress(address))) //거래 출력값
+		utils.HandleErr(json.NewEncoder(rw).Encode(blockchain.UTxOutsByAddress(address, blockchain.Blockchain()))) //거래 출력값
 	}
+}
+
+func mempool(rw http.ResponseWriter, r *http.Request){
+	utils.HandleErr(json.NewEncoder(rw).Encode(blockchain.Mempool.Txs))
+}
+
+func transactions(rw http.ResponseWriter, r *http.Request){
+	var payload addTxPayload //받을 사람과 금액이 있는 구조체 가져옴
+	//decode된 값을 payload 변수로 넘겨준다 (JSON은 request body의 데이터를 decode해서 struct(payload)로 변환시켜준다)
+	utils.HandleErr(json.NewDecoder(r.Body).Decode(&payload))
+	err := blockchain.Mempool.AddTx(payload.To, payload.Amount) //blockchain의 Mempool.AddTx()을 호출해서 보낼 금액과 대상을 넘겨줄수있다
+	if err != nil {
+		json.NewEncoder(rw).Encode(errorResponse{"잔액이 부족합니다 선생님"})
+	}
+	rw.WriteHeader(http.StatusCreated) //else인 경우에는 HTTP 상태를 created로 전송
 }
 
 func Start(aPort int){
@@ -142,7 +162,9 @@ func Start(aPort int){
 	router.HandleFunc("/status", status)
 	router.HandleFunc("/blocks", blocks).Methods("GET","POST")
 	router.HandleFunc("/blocks/{hash:[a-f0-9]+}", block).Methods("GET")
-	router.HandleFunc("/balance/{address}", balance) // balance{address}를 통해서 거래출력값 목록을 받고 
+	router.HandleFunc("/balance/{address}", balance) // balance{address}를 통해서 거래출력값 목록을받음
+	router.HandleFunc("/mempool", mempool)
+	router.HandleFunc("/transactions", transactions).Methods("POST")
 	fmt.Printf("http://localhost%s\n", port)
 	log.Fatal(http.ListenAndServe(port, router))
 }
