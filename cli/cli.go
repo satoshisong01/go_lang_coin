@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"runtime"
 
 	"github.com/go_lang_coins/explorer"
 	"github.com/go_lang_coins/rest"
@@ -15,30 +14,29 @@ func usage(){
 	fmt.Printf("명령어를 입력해 주세요\n\n")
 	fmt.Printf("-port: 서버의 포트\n")
 	fmt.Printf("-mode: 'REST' 와 'HTML'을 고르시오\n")
-	runtime.Goexit() //Goexit는 모든 함수를 제거하지만 그 전에 defer를 먼저 이행함
+	os.Exit(0)
 }
 
 func Start(){												//gohtml 로 끝나는 파일 불러오기
 
 if len(os.Args) == 1{
 	usage()
+	}
+
+	port := flag.Int("port", 4000, "서버의 포트")
+	mode := flag.String("mode", "rest", "html REST API")
+
+	flag.Parse()
+
+	switch *mode{
+	case "rest":
+		rest.Start(*port)
+	case "html":
+		explorer.Start(*port)
+	default:
+		usage()
+	}
 }
-
-port := flag.Int("port", 4000, "서버의 포트")
-mode := flag.String("mode", "rest", "html REST API")
-
-flag.Parse()
-
-switch *mode{
-case "rest":
-	rest.Start(*port)
-case "html":
-	explorer.Start(*port)
-default:
-	usage()
-}
-
-fmt.Println(*port, *mode)
 
 
 //FlagSet 정의
@@ -56,4 +54,3 @@ fmt.Println(*port, *mode)
 
 // fmt.Println(*portFlag)
 // }
-}

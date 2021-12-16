@@ -8,6 +8,7 @@ import (
 
 	"github.com/go_lang_coins/blockchain"
 	"github.com/go_lang_coins/utils"
+	"github.com/go_lang_coins/wallet"
 	"github.com/gorilla/mux"
 )
 
@@ -24,16 +25,20 @@ func (u url) MarshalText() ([]byte, error){
 }
 
 type urlDescription struct{
-	URL url `json:"url"` //json 표기명 변경
-	Method string `json:"method"`
+	URL         url    `json:"url"`
+	Method      string `json:"method"`
 	Description string `json:"description"`
-	Payload string `json:"payload,omitempty"`
+	Payload     string `json:"payload,omitempty"`
 	//json:",omitempty" 쓰면 파일이 없을때 표기안함
 }
 
 type balanceResponse struct {
 	Address string `json:"address"`
 	Balance int    `json:"balance"`
+}
+
+type myWalletResponse struct {
+	Address string `json:"address"`
 }
 
 type errorResponse struct{
@@ -81,7 +86,6 @@ func documentation(rw http.ResponseWriter, r *http.Request){
 			Description: "해당 주소의 거래출력값들을 구함",
 		},
 	}
-	
 	// b, err := json.Marshal(data)
 	// utils.HandleErr(err)
 	// fmt.Fprintf(rw, "%s", b)
@@ -102,24 +106,22 @@ func blocks(rw http.ResponseWriter, r *http.Request) {
 func block(rw http.ResponseWriter, r *http.Request){
 	vars := mux.Vars(r) //mux가 request에서 변수를 추출함
 	hash := vars["hash"] //vars 안에있는 hash를 가져올수있음
-	fmt.Println(hash)
 	block, err := blockchain.FindBlock(hash)
 	encoder := json.NewEncoder(rw)
-	if err == blockchain.ErrNotFound{
-		encoder.Encode(errorResponse{fmt.Sprint(err)})
-	}else{
-		encoder.Encode(block)
+	if err == blockchain.ErrNotFound {
+		utils.HandleErr(encoder.Encode(errorResponse{fmt.Sprint(err)}))
+	} else {
+		utils.HandleErr(encoder.Encode(block))
 	}
-	
 }
 
 func status(rw http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(rw).Encode(blockchain.Blockchain())
+	utils.HandleErr(json.NewEncoder(rw).Encode(blockchain.Blockchain()))
 }
 
 //json 명시 미들웨어
-func jsonContentTypeMiddleware(next http.Handler) http.Handler{
-	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request){
+func jsonContentTypeMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Add("Content-Type", "application/json")
 		next.ServeHTTP(rw, r)
 	})
@@ -149,9 +151,16 @@ func transactions(rw http.ResponseWriter, r *http.Request){
 	utils.HandleErr(json.NewDecoder(r.Body).Decode(&payload))
 	err := blockchain.Mempool.AddTx(payload.To, payload.Amount) //blockchain의 Mempool.AddTx()을 호출해서 보낼 금액과 대상을 넘겨줄수있다
 	if err != nil {
-		json.NewEncoder(rw).Encode(errorResponse{"잔액이 부족합니다 선생님"})
+		rw.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(rw).Encode(errorResponse{err.Error()})
+		return
 	}
 	rw.WriteHeader(http.StatusCreated) //else인 경우에는 HTTP 상태를 created로 전송
+}
+
+func myWallet(rw http.ResponseWriter, r *http.Request) {
+	address := wallet.Wallet().Address
+	json.NewEncoder(rw).Encode(myWalletResponse{Address: address})
 }
 
 func Start(aPort int){
@@ -162,8 +171,9 @@ func Start(aPort int){
 	router.HandleFunc("/status", status)
 	router.HandleFunc("/blocks", blocks).Methods("GET","POST")
 	router.HandleFunc("/blocks/{hash:[a-f0-9]+}", block).Methods("GET")
-	router.HandleFunc("/balance/{address}", balance) // balance{address}를 통해서 거래출력값 목록을받음
-	router.HandleFunc("/mempool", mempool)
+	router.HandleFunc("/balance/{address}", balance).Methods("GET")// balance{address}를 통해서 거래출력값 목록을받음
+	router.HandleFunc("/mempool", mempool).Methods("GET")
+	router.HandleFunc("/wallet", myWallet).Methods("GET")
 	router.HandleFunc("/transactions", transactions).Methods("POST")
 	fmt.Printf("http://localhost%s\n", port)
 	log.Fatal(http.ListenAndServe(port, router))

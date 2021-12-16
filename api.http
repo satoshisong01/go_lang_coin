@@ -29,4 +29,10 @@ http://localhost:4000/mempool
 http://localhost:4000/balance/sks
 
 ###
-http://localhost:4000/balance/young?total=true
+http://localhost:4000/balance/sks?total=true
+
+###
+http://localhost:4000/wallet
+
+###
+http://localhost:4000/balance/"b0816adcd1e519e8ffec7105b919e77184a0baa8728a6aecc889cddb2ce8081b9033e5330681a029dac4fb360027c99aed6bdd1a23fbd85205219b2137bda531"

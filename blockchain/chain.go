@@ -16,9 +16,9 @@ const(
 )
 
 type blockchain struct {
-	NewstHash string `json:"newestHash"`
-	Height 	 int	`json:"height"`
-	CurrentDifficulty int `json:"currentDifficulty"`
+	NewestHash        string `json:"newestHash"`
+	Height            int    `json:"height"`
+	CurrentDifficulty int    `json:"currentDifficulty"`
 }
 
 var b *blockchain
@@ -30,31 +30,48 @@ func (b *blockchain) restore(data []byte){
 }
 
 
-func (b *blockchain) AddBlock(){
-	block := createBlock(b.NewstHash, b.Height +1, getDifficulty(b))
-	b.NewstHash = block.Hash
+func (b *blockchain) AddBlock() {
+	block := createBlock(b.NewestHash, b.Height+1, getDifficulty(b))
+	b.NewestHash = block.Hash
 	b.Height = block.Height
 	b.CurrentDifficulty = block.Difficulty
-	persistBlockchain(b)
+	persistBlockhain(b)
 }
 
-func persistBlockchain(b *blockchain){
+func persistBlockhain(b *blockchain) {
 	db.SaveCheckpoint(utils.ToBytes(b))
 }
 
 func Blocks(b *blockchain) []*Block{
 	var blocks []*Block //블록 포인터의 slice만든뒤
-	hashCursor := b.NewstHash  //찾을 해쉬인 hashCursor만듦(초기에는 newstHash찾음)
+	hashCursor := b.NewestHash  //찾을 해쉬인 hashCursor만듦(초기에는 newstHash찾음)
 	for {
 		block, _ := FindBlock(hashCursor) //findblock함수로 NewstHash찾음
 		blocks = append(blocks, block) //찾아서 블록 슬라이스에 넣고
-		if block.PrevHash != ""{ //Prevhash가 빈값이 아니라면 (최초의 블록은 PrevHash가없으니 나올때까지 계속 타고들어감)
+		if block.PrevHash != "" { //Prevhash가 빈값이 아니라면 (최초의 블록은 PrevHash가없으니 나올때까지 계속 타고들어감)
 			hashCursor = block.PrevHash //찾을 해쉬를 Prevhash로바꾼다
 		} else {
 			break
 		}
 	}
 	return blocks
+}
+
+func Txs(b *blockchain) []*Tx { //트랜색션을 찾음 (블록체인을 input으로받아 블록체인 안의 블록들에 있는 모든 트랜잭션을 가져옴)
+	var txs []*Tx //슬라이드에 넣은뒤 리턴
+	for _, block := range Blocks(b){
+		txs = append(txs, block.Transactions...)
+	}
+	return txs
+}
+
+func FindTx(b *blockchain, targetID string) *Tx{ //찾으려고 하는 트랜색션 id를  input으로 받음
+	for _, tx := range Txs(b) { //블록체인의 모든 트랜색션을 확인
+		if tx.ID == targetID { //id가 같으면 리턴
+			return tx
+		}
+	}
+	return nil
 }
 
 func recalculateDifficulty(b *blockchain) int{
@@ -67,9 +84,8 @@ func recalculateDifficulty(b *blockchain) int{
 		return b.CurrentDifficulty + 1 //실제 예상 시간보다 적다면, 빨리 생성되니까 +1 로 늘린다
 	} else if actualTime >= (expectedTime + allowedRange) {
 		return b.CurrentDifficulty - 1 //실제 예상시간보다 길다면, -1로 줄인다
-	} else {
-		return b.CurrentDifficulty
 	}
+		return b.CurrentDifficulty
 }
 
 func getDifficulty(b *blockchain) int{
@@ -90,12 +106,15 @@ func UTxOutsByAddress(address string, b *blockchain) []*UTxOut { //거래출력�
 	for _, block := range Blocks(b) { //블럭을 참조
 		for _, tx := range block.Transactions { //블럭안에 트랜잭션을 참조
 			for _, input := range tx.TxIns {	//트랜색션 안의 트랜색션 input 추적
-				if input.Owner == address {
+				if input.Signature == "COINBASE"{
+					break
+				}
+				if FindTx(b, input.TxID).TxOuts[input.Index].Address == address {
 					creatorTxs[input.TxID] = true //해당 input으로 사용하는 output을 생성한 트랜잭션을 찾음
 				}
 			}
 			for index, output := range tx.TxOuts { //해당 output이 creatorTxs 안에 있는 트랜잭션 내에 없다는 것을 확인함
-				if output.Owner == address {
+				if output.Address == address {
 					if _, ok := creatorTxs[tx.ID]; !ok { //input으로 사용하고 있는 output을 소유한 트랜잭션ID로 들어오지않으면
 						uTxOut := &UTxOut{tx.ID, index, output.Amount} //새로 생성된 unspent 트랜색션 output을 확인하면서
 						if !isOnMempool(uTxOut){	//이미 mempool에서 사용되고 있는지 체크함(해당 트랜색션ID를 가진 input과 index를 찾아옴)

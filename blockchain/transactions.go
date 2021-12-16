@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/go_lang_coins/utils"
+	"github.com/go_lang_coins/wallet"
 )
 
 const (
@@ -21,25 +22,22 @@ type mempool struct{
 var Mempool *mempool = &mempool{}
 
 type Tx struct{
-	ID string		`json:"id"`
-	Timestamp int	`json:"timestamp"`
-	TxIns []*TxIn	`json:"txIns"`
-	TxOuts []*TxOut	`json:"txOuts"`
+	ID        string   `json:"id"`
+	Timestamp int      `json:"timestamp"`
+	TxIns     []*TxIn  `json:"txIns"`
+	TxOuts    []*TxOut `json:"txOuts"`
 }
 
-func (t *Tx) getId(){
-	t.ID = utils.Hash(t)
-}
 
 type TxIn struct{
 	TxID string `json:"txId"` //어떻게 이전의 트랜잭션 output을 찾을것인가 (ID를 통해서)
 	Index int	`json:"index"` //이 트랜잭션의 트랜잭션 output의 어디에 해당 트랜잭션 output이 위치해 있는지 찾는다
-	Owner string	`json:"owner_TxIn"`
+	Signature string	`json:"signature"`
 }
 
 type TxOut struct{
-	Owner string	`json:"owner_TxOut"`
-	Amount int		`json:"amount_TxOut"`
+	Address string `json:"address"`
+	Amount  int    `json:"amount"`
 }
 
 type UTxOut struct{
@@ -48,10 +46,37 @@ type UTxOut struct{
 	Amount int	`json:"amount"`
 }
 
+func (t *Tx) getId(){
+	t.ID = utils.Hash(t)
+}
+
+func (t *Tx) sign(){
+	for _, txIn := range t.TxIns {
+		txIn.Signature = wallet.Sign(t.ID, wallet.Wallet()) //트랜잭션의 모든 트랜잭션 input들에 대해 서명을함
+	}
+}
+
+func validate(tx *Tx) bool { //만든사람 검증
+	valid := true
+	for _, txIn := range tx.TxIns{ //transaction input을 생성한 이전 transaction을 찾지 못하면 (blockchain에 있는 코인을 가지고 있지 않은 사람에 의해 만들어진것)
+			prevTx := FindTx(Blockchain(), txIn.TxID) //이전 트랜색션이 blockchain에 없다면 확인된게 없음
+			if prevTx == nil { //이전 트랜색션(prevTx) 가 nil이면
+				valid = false
+				break
+			}
+			address := prevTx.TxOuts[txIn.Index].Address
+			valid = wallet.Verify(txIn.Signature, tx.ID, address)
+			if !valid{
+				break
+			}
+	}
+	return valid
+}
+//트랜잭션 input을 만드려면 아직사용되지않은 트랜잭션 output을 가지고있어야함, 해당 트랜잭션 output을 가지고 있다는것을 증명해야함
+
 //mempool에 있는 트랜잭션에 존재하는 input들 중에 uTxOut과 같은 트랜잭션 ID와 index를 가지고 있는 항목이 있는지 확인해줌
 //*mempoop에 현재 내가 추가하고자 하는 unspent 트랜잭션 output이 존재하는지 확인해주는 함수* (true라면 chain.go에서 해당함수 실행하지않음)
-func isOnMempool(uTxOut *UTxOut) bool{ //추가하려는 unspent 트랜잭션 output이  mempool에 아직 없는지 확인
-	exists := false
+func isOnMempool(uTxOut *UTxOut) (exists bool){ //추가하려는 unspent 트랜잭션 output이  mempool에 아직 없는지 확인
 	Outer: //label 사용
 		for _, tx := range Mempool.Txs { //mempool안에 들어있는 트랜잭션을 둘러봄
 			for _, input := range tx. TxIns { //트랜잭션 안에있는 트랜잭션 input을 둘러봄
@@ -61,7 +86,7 @@ func isOnMempool(uTxOut *UTxOut) bool{ //추가하려는 unspent 트랜잭션 ou
 				}
 			}
 		}
-	return exists
+	return
 }
 
 //채굴자를 주소로 삼는 코인베이스 거래내역을 생성해서 Tx포인터를 리턴
@@ -82,10 +107,13 @@ func makeCoinbaseTx(address string) *Tx{
 	return &tx
 }
 
+var ErrorNoMoney = errors.New("돈이 충분하지 않습니다")
+var ErrorNotValid = errors.New("Tx Invalid")
+
 //transaction을 생성하는 함수
 func makeTx(from, to string, amount int) (*Tx, error){
 	if BalanceByAddress(from, Blockchain()) < amount {
-		return nil, errors.New("돈이 충분하지 않습니다")
+		return nil, ErrorNoMoney
 	}
 	var txOuts []*TxOut
 	var txIns []*TxIn
@@ -112,13 +140,18 @@ func makeTx(from, to string, amount int) (*Tx, error){
 		TxOuts:    txOuts,
 	}
 	tx.getId() // 트랜잭션에 getId함수를 통해 id 생성
+	tx.sign()
+	valid := validate(tx)
+	if !valid {
+		return nil, ErrorNotValid
+	}
 	return tx, nil //트랜잭션 반환, 에러는 빼고
 }
 
 
 //AddTx 함수는 mempool에 transaction을 추가할뿐, transaction을 생성하지는 않음
 func (m *mempool) AddTx(to string, amount int) error{
-	tx, err := makeTx("sks", to, amount)
+	tx, err := makeTx(wallet.Wallet().Address, to, amount)
 	if err != nil { //에러를 반환받았을때
 		return err
 	}
@@ -127,7 +160,7 @@ func (m *mempool) AddTx(to string, amount int) error{
 }
 
 func (m *mempool) TxToConfirm() []*Tx{	//모든 transaction들을 건내주고 mempool을 비워주는 함수
-	coinbase := makeCoinbaseTx("sks")
+	coinbase := makeCoinbaseTx(wallet.Wallet().Address)
 	txs := m.Txs
 	txs = append(txs, coinbase)
 	m.Txs = nil		//mempool에서 transaction을 비워줌
